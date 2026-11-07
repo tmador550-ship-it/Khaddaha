@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>خدّعها — لعبة الخداع والحقيقة</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;800;900&display=swap">
+<style>
+:root{--bg:#f7f0ff;--ink:#2a1250;--card:#fff;--pink:#e8457c;--gold:#ffd84d;--mute:#6d5a8f;--line:#d9c8f2;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#1d0c3a;--ink:#fbf4ff;--card:#2e1560;--mute:#b9a3e0;--line:#4a2a85;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:Cairo,Tahoma,sans-serif;display:flex;justify-content:center;padding-top:env(safe-area-inset-top,0)}
+main{width:100%;max-width:480px;padding:20px 18px 40px;display:flex;flex-direction:column;gap:16px}
+h1{font-size:3.2rem;font-weight:900;margin:8px 0 0;line-height:1.1;color:var(--pink)}
+h2{font-size:1.4rem;font-weight:800;margin:0}
+p{margin:0;color:var(--mute);line-height:1.7}
+.q{font-size:1.5rem;font-weight:800;line-height:1.6;background:var(--card);border:2px solid var(--line);border-radius:18px;padding:18px}
+.q b{background:var(--gold);color:#2a1250;border-radius:8px;padding:0 10px}
+input{font:inherit;font-size:1.1rem;width:100%;padding:14px;border-radius:14px;border:2px solid var(--line);background:var(--card);color:var(--ink)}
+input:focus{outline:3px solid var(--pink);outline-offset:1px}
+button{font:inherit;font-weight:800;font-size:1.1rem;border:0;border-radius:14px;padding:14px 18px;background:var(--pink);color:#fff;cursor:pointer}
+button:disabled{opacity:.5}
+button.alt{background:var(--card);color:var(--ink);border:2px solid var(--line)}
+button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.opt{display:block;width:100%;text-align:right;background:var(--card);color:var(--ink);border:2px solid var(--line);margin-bottom:10px;font-weight:500}
+.opt.truth{border-color:#1fa971;background:rgba(31,169,113,.18)}
+.opt small{display:block;color:var(--mute);font-weight:500;margin-top:4px}
+div.opt{padding:14px;border-radius:14px}
+.big{font-size:1.25rem;text-align:center;padding:26px 10px;background:var(--card);border-radius:18px;border:2px dashed var(--pink)}
+.code{font-size:3rem;font-weight:900;letter-spacing:6px;color:var(--pink)}
+.score{display:flex;justify-content:space-between;padding:12px 16px;background:var(--card);border-radius:12px;margin-bottom:8px;font-weight:800}
+.err{color:var(--pink);min-height:1.4em;font-weight:800}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+var app=document.getElementById('app'),$=function(i){return document.getElementById(i)};
+var sess=null,es=null,sig='',myName=localStorage.getItem('kh_name')||'';
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function show(h){app.innerHTML=h;window.scrollTo(0,0);var f=app.querySelector('input');if(f&&!f.value)f.focus()}
+function api(path,body){return fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'خطأ');return j})})}
+function act(o){o.code=sess.code;o.id=sess.id;return api('/api/act',o)}
+
+function entry(){
+ if(es){es.close();es=null}sig='';
+ var pre=new URLSearchParams(location.search).get('room')||'';
+ show('<h1>خدّعها</h1><p>اكتب كذبة مقنعة، وحاول تكشف الحقيقة وسط كذبات أصحابك. كل لاعب من جواله.</p>'+
+ '<input id="nm" maxlength="14" placeholder="اسمك" value="'+esc(myName)+'">'+
+ '<button id="mk">إنشاء غرفة</button>'+
+ '<p>أو انضم إلى غرفة صديقك:</p><input id="cd" inputmode="numeric" maxlength="4" placeholder="رمز الغرفة (4 أرقام)" value="'+esc(pre)+'">'+
+ '<button class="alt" id="jn">انضم</button><div class="err" id="e"></div>');
+ function go(path,extra){
+  myName=$('nm').value.trim();localStorage.setItem('kh_name',myName);
+  var b={name:myName};if(extra)b.code=$('cd').value.trim();
+  api(path,b).then(function(r){sess=r;sessionStorage.setItem('kh_sess',JSON.stringify(r));connect()}).catch(function(e){$('e').textContent=e.message});
+ }
+ $('mk').onclick=function(){go('/api/create')};$('jn').onclick=function(){go('/api/join',1)};
+}
+function connect(){
+ if(es)es.close();sig='';
+ es=new EventSource('/api/events?code='+sess.code+'&id='+sess.id);
+ es.onmessage=function(m){draw(JSON.parse(m.data))};
+ es.onerror=function(){if(es.readyState==2){sessionStorage.removeItem('kh_sess');sess=null;show('<h2>انتهت الجلسة</h2><p>الغرفة لم تعد موجودة.</p><button id="b">رجوع</button>');$('b').onclick=entry}};
+}
+function qh(v){return '<div class="q">'+esc(v.q).replace('___','<b>؟؟؟</b>')+'</div>'}
+function board(v){return v.players.slice().sort(function(a,b){return b.score-a.score}).map(function(p,i){return '<div class="score"><span>'+(i+1)+'. '+esc(p.name)+(p.me?' (أنت)':'')+'</span><span>'+p.score+'</span></div>'}).join('')}
+function draw(v){
+ var done=v.players.filter(function(p){return p.done}).length,n=v.players.length,k,h;
+ if(v.ph=='lobby'){
+  k='l'+v.players.map(function(p){return p.name}).join('|')+v.isHost;if(k==sig)return;sig=k;
+  var link=location.origin+'/?room='+v.code;
+  h='<h2>غرفة اللعب</h2><div class="big">الرمز<br><span class="code">'+v.code+'</span></div><button class="alt" id="cp">نسخ رابط الدعوة</button><h2>اللاعبون ('+n+')</h2>'+
+   v.players.map(function(p){return '<div class="score"><span>'+esc(p.name)+(p.me?' (أنت)':'')+'</span></div>'}).join('')+
+   (v.isHost?'<button id="st"'+(n<2?' disabled':'')+'>ابدأ اللعبة</button>':'<p>بانتظار المضيف ليبدأ…</p>');
+  show(h);
+  $('cp').onclick=function(){var b=this;(navigator.clipboard?navigator.clipboard.writeText(link):Promise.reject()).then(function(){b.textContent='تم النسخ ✅'}).catch(function(){prompt('انسخ الرابط:',link)})};
+  if(v.isHost)$('st').onclick=function(){act({type:'start'})};return;
+ }
+ if(v.ph=='write'){
+  k=v.mine?'ws'+v.r+done:'w'+v.r;if(k==sig)return;sig=k;
+  if(v.mine){show('<p>الجولة '+(v.r+1)+' من '+v.total+'</p>'+qh(v)+'<div class="big">وصلت كذبتك ✅<br>بانتظار الباقين ('+done+'/'+n+')</div>'+(v.isHost?'<button class="alt" id="sk">تخطّي المتأخرين</button>':''));if(v.isHost)$('sk').onclick=function(){act({type:'skip'})};return}
+  show('<p>الجولة '+(v.r+1)+' من '+v.total+'</p><h2>اكتب كذبتك</h2>'+qh(v)+'<input id="a" maxlength="30" placeholder="إجابة تبدو حقيقية"><div class="err" id="e"></div><button id="ok">إرسال</button>');
+  function send(){var t=$('a').value.trim();if(!t){$('e').textContent='اكتب إجابة أولًا.';return}act({type:'answer',text:t}).catch(function(e){$('e').textContent=e.message})}
+  $('ok').onclick=send;$('a').onkeydown=function(e){if(e.key=='Enter')send()};return;
+ }
+ if(v.ph=='vote'){
+  k=v.mine?'vs'+v.r+done:'v'+v.r;if(k==sig)return;sig=k;
+  if(v.mine){show(qh(v)+'<div class="big">تم تصويتك ✅<br>بانتظار الباقين ('+done+'/'+n+')</div>'+(v.isHost?'<button class="alt" id="sk">اكشف النتيجة الآن</button>':''));if(v.isHost)$('sk').onclick=function(){act({type:'skip'})};return}
+  h='<h2>أيّها الحقيقة؟</h2>'+qh(v);
+  v.o.forEach(function(o){h+='<button class="opt" data-k="'+o.k+'">'+esc(o.t)+'</button>'});
+  show(h);[].forEach.call(app.querySelectorAll('.opt'),function(b){b.onclick=function(){act({type:'vote',k:+b.dataset.k})}});return;
+ }
+ if(v.ph=='reveal'){
+  k='r'+v.r+v.isHost;if(k==sig)return;sig=k;h='<h2>النتيجة</h2>'+qh(v);
+  v.o.forEach(function(o){h+='<div class="opt'+(o.truth?' truth':'')+'">'+(o.truth?'✅ الحقيقة: ':'')+esc(o.t)+'<small>'+(o.truth?'':'كذبة '+esc(o.author)+' — ')+(o.voters.length?'اختارها: '+esc(o.voters.join('، ')):'لم يخترها أحد')+'</small></div>'});
+  h+='<p>الحقيقة تعطي ٢ نقطة، وكل شخص ينخدع بكذبتك يعطيك نقطة.</p><h2>الترتيب</h2>'+board(v)+(v.isHost?'<button id="nx">'+(v.r+1<v.total?'الجولة التالية':'النتيجة النهائية')+'</button>':'<p>بانتظار المضيف…</p>');
+  show(h);if(v.isHost)$('nx').onclick=function(){act({type:'next'})};return;
+ }
+ if(v.ph=='end'){
+  k='e'+v.isHost;if(k==sig)return;sig=k;
+  var top=v.players.slice().sort(function(a,b){return b.score-a.score})[0];
+  show('<h1>🏆 '+esc(top.name)+'</h1><p>أمهر مخادع في المجموعة</p>'+board(v)+(v.isHost?'<button id="ag">العب مرة ثانية</button>':'<p>بانتظار المضيف…</p>'));
+  if(v.isHost)$('ag').onclick=function(){act({type:'again'})};
+ }
+}
+var old=sessionStorage.getItem('kh_sess');
+if(old){try{sess=JSON.parse(old);connect()}catch(e){entry()}}else entry();
+</script>
+</body>
+</html>

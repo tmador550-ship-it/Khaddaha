@@ -165,10 +165,11 @@ http.createServer(async (req, res) => {
     }
     return json(res, 404, { error: 'not found' });
   }
-  const file = path.join(__dirname, 'public', url.pathname === '/' ? 'index.html' : path.normalize(url.pathname).replace(/^(\.\.[/\\])+/, ''));
+  if (url.pathname !== '/' && url.pathname !== '/index.html') { res.writeHead(404); return res.end('Not found'); }
+  const file = [path.join(__dirname, 'public', 'index.html'), path.join(__dirname, 'index.html')].find(f => fs.existsSync(f)) || '';
   fs.readFile(file, (e, d) => {
     if (e) { res.writeHead(404); return res.end('Not found'); }
-    res.writeHead(200, { 'Content-Type': file.endsWith('.html') ? 'text/html; charset=utf-8' : 'application/octet-stream' }); res.end(d);
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(d);
   });
 }).listen(PORT, () => console.log('خدّعها يعمل على المنفذ ' + PORT));
 

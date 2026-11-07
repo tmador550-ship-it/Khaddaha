@@ -1,0 +1,8 @@
+{
+  "name": "khaddaha",
+  "version": "1.0.0",
+  "description": "لعبة خدّعها - لعبة خداع وحقيقة جماعية",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
